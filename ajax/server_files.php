@@ -18,9 +18,11 @@ $_SESSION['dirdeep'] = '0';
 // Get list of files
 require(DOCROOT.'/includes/classes/files.php');
 $Files  = new Files;
-$file_list  = $Files->file_list($url_id,false);
+//$file_list  = $Files->file_list($url_id,false);
 
+$result  = $Files->link_to_ftp($url_id);
 // Show directory display
-$result = $Files->displaydir($file_list,$url_id);
-
+//echo "HOLA";
+//$result = $Files->displaydir($file_list,$url_id);
+echo $result;
 ?>

@@ -2,6 +2,32 @@
 // Class for File Management of game servers
 class Files
 {
+    public function link_to_ftp($srvid){
+        if(empty($srvid)) return 'No server ID given';
+
+        $result_nid = @mysql_query("SELECT netid FROM servers WHERE id = '$srvid' LIMIT 1");
+        $row_nid    = mysql_fetch_row($result_nid);
+        $this_netid = $row_nid[0];
+
+        if(empty($this_netid)) return 'Failed to get network ID!';
+
+        require(DOCROOT.'/includes/classes/network.php');
+        $Network  = new Network;
+	$netinfo  = $Network->netinfo($this_netid);
+	$sso_info = $Network->sso_info($srvid);
+	$ssh_ip   = $netinfo['ssh_ip'];        
+        $ssh_user = $sso_info['sso_user'];
+        $ssh_pass = $sso_info['sso_pass'];
+        $sso_username = $sso_info['username'];
+        $sso_gamedir  = $sso_info['game_dir'];
+
+	$ftpurl="http://gpx.pheek.net/ftp/?ftpserver=$ssh_ip&username=$ssh_user&password=$ssh_pass&state=browse&state2=main&directory=$sso_gamedir";
+        return "<a target='_blank' href='$ftpurl'>Abrir en nueva pesta&ntilde;a</a>
+		<iframe width='100%' height='700px' frameBorder='0' scrolling='vertical' src='$ftpurl' />
+		<a target='_blank' href='$ftpurl'>Abrir en nueva pest&ntilde;a</a>";
+    }
+
+
     // Get a file list for a game server
     public function file_list($srvid,$dir,$tpl_browse=false)
     {
