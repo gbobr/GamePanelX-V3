@@ -6,8 +6,6 @@ class Servers
     {
         if(empty($srvid)) return 'No server ID provided';
         
-        $srv_info   = array();
-        
         $result_srv = @mysql_query("SELECT 
                                       s.id,
                                       s.userid,
@@ -28,8 +26,8 @@ class Servers
                                       s.sv_password,
                                       s.rcon,
                                       n.ip,
+				      n.parentid,
                                       u.username,
-                                      p.id AS parentid,
                                       d.steam,
                                       d.type,
                                       d.config_file,
@@ -48,9 +46,6 @@ class Servers
                                     FROM servers AS s 
                                     LEFT JOIN network AS n ON 
                                       s.netid = n.id 
-                                    JOIN network AS p ON 
-                                      n.parentid = p.id 
-                                      OR n.parentid = '0' 
                                     LEFT JOIN users AS u ON 
                                       s.userid = u.id 
                                     LEFT JOIN default_games AS d ON 
@@ -58,7 +53,7 @@ class Servers
                                     WHERE 
                                       s.id = '$srvid' 
                                     LIMIT 1") or die('Failed to query for servers: '.mysql_error());
-        
+        $srv_info   = array();
         while($row_srv = mysql_fetch_assoc($result_srv))
         {
             $srv_info[] = $row_srv;
@@ -140,13 +135,11 @@ class Servers
         $srv_cmd        = $srv_info[0]['simplecmd'];
         $srv_work_dir   = $srv_info[0]['working_dir'];
         $srv_pid_file   = $srv_info[0]['pid_file'];
-        $srv_netid      = $srv_info[0]['parentid'];
+	$srv_netid      = $srv_info[0]['netid'];
+        $srv_parentid   = $srv_info[0]['parentid'];
         $config_file    = $srv_info[0]['config_file'];
+	#if(!empty($srv_parentid)) $srv_netid = $srv_parentid;
 
-	# Get all default vals (hostname etc)
-
-        #var_dump($srv_info);
-        
         // Double-check required
         if(empty($srv_username) || empty($srv_ip) || empty($srv_port) || empty($srv_cmd)) return 'restart class: Required values were left out';
         
@@ -157,7 +150,7 @@ class Servers
         require('network.php');
         $Network  = new Network;
         $net_info = $Network->netinfo($srv_netid);
-        
+    
 	##################################################################################
 
 	// Update server config
@@ -199,10 +192,11 @@ class Servers
         $srv_username   = $srv_info[0]['username'];
         $srv_ip         = $srv_info[0]['ip'];
         $srv_port       = $srv_info[0]['port'];
-        $srv_netid      = $srv_info[0]['parentid'];
         $srv_work_dir   = $srv_info[0]['working_dir'];
         $srv_pid_file   = $srv_info[0]['pid_file'];
-        
+        $srv_netid      = $srv_info[0]['netid'];
+        $srv_parentid   = $srv_info[0]['parentid'];
+
         if($srv_work_dir) $srv_work_dir = ' -w ' . $srv_work_dir;
         if($srv_pid_file) $srv_pid_file = ' -P ' . $srv_pid_file;
         
@@ -246,10 +240,11 @@ class Servers
         $srv_ip           = $srv_info[0]['ip'];
         $srv_port         = $srv_info[0]['port'];
         $srv_update_cmd   = $srv_info[0]['update_cmd'];
-        $srv_netid        = $srv_info[0]['parentid'];
         $srv_is_steam     = $srv_info[0]['steam'];
         $srv_steam_name   = $srv_info[0]['steam_name'];
-        
+        $srv_netid      = $srv_info[0]['netid'];
+        $srv_parentid   = $srv_info[0]['parentid'];
+
         if($srv_is_steam)
         {
             $settings = $Core->getsettings();
@@ -415,6 +410,19 @@ class Servers
 		$rcon_password = $Core->genstring('8');
 	}
 
+	#########################################################################################
+
+	// If local, ensure we can write to the _SERVERS/accounts directory
+        $result_loc = @mysql_query("SELECT is_local FROM network WHERE id = '$netid' LIMIT 1");
+        $row_loc    = mysql_fetch_row($result_loc);
+        $net_local  = $row_loc[0];
+
+        if($net_local && !is_writable(DOCROOT.'/_SERVERS/accounts')) {
+                die('Error: Unable to write to the "'.DOCROOT.'/_SERVERS/accounts" directory.  Check that this directory is recursively owned by your webserver user, and try again.');
+        }
+
+	#########################################################################################
+
         // Insert into db
         @mysql_query("INSERT INTO servers (userid,netid,defid,port,maxplayers,status,date_created,token,working_dir,pid_file,update_cmd,description,map,rcon,hostname,sv_password) VALUES('$ownerid','$netid','$gameid','$port','$def_maxplayers','installing',NOW(),'$remote_token','$def_working_dir','$def_pid_file','$def_update_cmd','$description','$def_map','$rcon_password','$def_hostname','$private_password')") or die('Failed to insert server: '.mysql_error());
         $srv_id = mysql_insert_id();
@@ -474,15 +482,46 @@ class Servers
         
         ############################################################################################
 
+	//
         // Create on Remote server
-        $net_cmd  = "CreateServer -u $this_usrname -i $this_ip -p $port -x $this_tplid -c \"$this_page\"";
+	//
+
+	// Check via 'gpx' user if account exists, create if needed, THEN run CreateServer.  Cannot add this functionality to CreateServer as CreateServer is run by the gpxblah accounts.
+	if(!$net_local) {
+		$sso_info = $Network->sso_info($srv_id);
+		$sso_user = substr($sso_info['sso_user'], 3); // Lose the 'gpx' prefix
+		$sso_pass = $sso_info['sso_pass'];
+		
+		// Remote: Create the system user account if needed.  Okay if it already exists.
+		$crypt_pass     = crypt($sso_pass);
+		$net_cmd        = "CreateUser -u '$sso_user' -p '$crypt_pass'";
+
+		$create_result  = $Network->runcmd($netid,$net_arr,$net_cmd,true);
+
+	// Proceed if the user exists, or it was successfully created
+		if($create_result == 'success') {
+			// Allow GPXManager to create the account
+	                sleep(4);
+		}
+		elseif(!preg_match('/That user already exists/', $create_result)) {
+			// Failed, delete this server
+			$this->delete_soft($srv_id);
+
+			die('Failed to create the user account for this server ('.$create_result.') exiting.');
+		}
+	}
+
+	$net_cmd  = "CreateServer -u $this_usrname -i $this_ip -p $port -x $this_tplid -c \"$this_page\"";
         $result_net_create = $Network->runcmd($netid,$net_arr,$net_cmd,true,$srv_id);
+
+	#################
 
 	if($result_net_create != 'success')
 	{
 		// Failed on Remote Creation; delete this server
-		@mysql_query("DELETE FROM servers WHERE id = '$srv_id'") or die('Failed to delete the server from the database');
-		@mysql_query("DELETE FROM servers_startup WHERE srvid = '$srv_id'") or die('Failed to delete the server startups from the database');
+		#@mysql_query("DELETE FROM servers WHERE id = '$srv_id'") or die('Failed to delete the server from the database');
+		#@mysql_query("DELETE FROM servers_startup WHERE srvid = '$srv_id'") or die('Failed to delete the server startups from the database');
+		$this->delete_soft($srv_id);
 
 		return 'Remote Failed: '.$result_net_create;
 	}
@@ -510,8 +549,8 @@ class Servers
         $srv_username   = $srv_info[0]['username'];
         $srv_ip         = $srv_info[0]['ip'];
         $srv_port       = $srv_info[0]['port'];
-        $srv_netid      = $srv_info[0]['parentid'];
-        
+        $srv_netid      = $srv_info[0]['netid'];
+        $srv_parentid   = $srv_info[0]['parentid'];
         
         // Run deletion on server-side
         $ssh_cmd  = "DeleteServer -u $srv_username -i $srv_ip -p $srv_port";
@@ -523,9 +562,7 @@ class Servers
         $ssh_response = $Network->runcmd($srv_netid,$net_info,$ssh_cmd,true,$srvid);
         
         // Delete from db
-        @mysql_query("DELETE FROM servers WHERE id = '$srvid'") or die('Failed to delete server from database!');
-        @mysql_query("DELETE FROM servers_startup WHERE srvid = '$srvid'") or die('Failed to delete server startup items from database!');
-        
+        $this->delete_soft($srvid);
         
         // If actually deleted files...
         if($ssh_response == 'success')
@@ -539,8 +576,18 @@ class Servers
         }
         
     }
-    
-    
+
+    // Soft-delete a server (just db delete)    
+    public function delete_soft($srvid) {
+	if(empty($srvid)) return 'No server ID given';
+	
+	// Delete from db
+        @mysql_query("DELETE FROM servers WHERE id = '$srvid'") or die('Failed to delete server from database!');
+        @mysql_query("DELETE FROM servers_startup WHERE srvid = '$srvid'") or die('Failed to delete server startup items from database!');
+
+	return true;
+    }
+
     
     
     
@@ -561,8 +608,9 @@ class Servers
         $srv_username   = $srv_info[0]['username'];
         $srv_ip         = $srv_info[0]['ip'];
         $srv_port       = $srv_info[0]['port'];
-        $srv_netid      = $srv_info[0]['parentid'];
-        
+        $srv_netid      = $srv_info[0]['netid'];
+        $srv_parentid   = $srv_info[0]['parentid'];
+
         // Double-check required
         if(empty($srv_username) || empty($srv_ip) || empty($srv_port)) return '{"error":"restart class: Required values were left out"}';
         
@@ -668,40 +716,6 @@ class Servers
     }
     
     
-    
-    
-    
-    /*
-    public function tail_logfile($file, $lines) {
-        //global $fsize;
-        $handle = fopen($file, "r");
-        $linecounter = $lines;
-        $pos = -2;
-        $beginning = false;
-        $text = array();
-        while ($linecounter > 0) {
-            $t = " ";
-            while ($t != "\n") {
-                if(fseek($handle, $pos, SEEK_END) == -1) {
-                    $beginning = true;
-                    break;
-                }
-                $t = fgetc($handle);
-                $pos --;
-            }
-            $linecounter --;
-            if ($beginning) {
-                rewind($handle);
-            }
-            $text[$lines-$linecounter-1] = fgets($handle);
-            if ($beginning) break;
-        }
-        fclose ($handle);
-        return array_reverse($text);
-    }
-    */
-    
-    
     // Get recent server log output
     public function getoutput($srvid)
     {
@@ -711,10 +725,13 @@ class Servers
         $srv_username     = $srv_info[0]['username'];
         $srv_ip           = $srv_info[0]['ip'];
         $srv_port         = $srv_info[0]['port'];
-        $srv_netid        = $srv_info[0]['parentid'];
+        #$srv_netid        = $srv_info[0]['parentid'];
         $srv_working_dir  = $srv_info[0]['working_dir'];
         if(!empty($srv_working_dir)) $srv_working_dir = ' -w ' . $srv_working_dir;
         
+	$srv_netid      = $srv_info[0]['netid'];
+        $srv_parentid   = $srv_info[0]['parentid'];
+
         require('network.php');
         $Network   = new Network;
         $net_info  = $Network->netinfo($srv_netid);
@@ -752,10 +769,12 @@ class Servers
         $srv_username     = $srv_info[0]['username'];
         $srv_ip           = $srv_info[0]['ip'];
         $srv_port         = $srv_info[0]['port'];
-        $srv_netid        = $srv_info[0]['parentid'];
         $srv_working_dir  = $srv_info[0]['working_dir'];
         if($srv_working_dir) $srv_working_dir = ' -w ' . $srv_working_dir;
         
+	$srv_netid      = $srv_info[0]['netid'];
+        $srv_parentid   = $srv_info[0]['parentid'];
+
         require('network.php');
         $Network  = new Network;
         $net_info = $Network->netinfo($srv_netid);
@@ -849,7 +868,6 @@ class Servers
 	 * - Ryan
 	 * 
 	*/
-	# TESTING ONLY: unset($ret_arr);
 	
 	// No available default ports on any ips.  Try non-standard ports.
         if(empty($ret_arr))
@@ -861,31 +879,6 @@ class Servers
 	    $list_ports = '';
 	    for($i=$default_port+10; $i <= $default_port+60; $i++)
 	    {
-		/*
-		 * I give up on this for now...
-		 * 
-		foreach($net_ips_arr as $row_ips)
-		{
-		    $this_netid      = $row_ips['id'];
-		    $this_used_port  = $row_ips['port'];
-		    
-		    $key = array_search($i, $row_ips);
-		    
-		    echo "<br>Trying port $i on netid $this_netid, key: $key ...<br>";
-		    
-		    // Key will be 'port' if this port is used
-		    if($key != 'port')
-		    {
-			$ret_arr['available'] = 'yes';
-			$ret_arr['netid']     = $this_netid;
-			$ret_arr['port']      = "$i";
-			break 2;
-		    }
-		}
-		*/
-		
-		# echo "Querying for port $i ...<br>";
-		
 		// No good very bad method!  Need to find a better way that doesn't potentially re-query mysql so many times.
 		$result_av  = @mysql_query("SELECT 
 						n.id AS netid,
@@ -912,11 +905,6 @@ class Servers
 	    // If we found nothing still...
 	    if(empty($ret_arr)) $ret_arr['available'] = '0';
 	}
-	
-	#echo '<pre>';
-	#var_dump($ret_arr);
-	#echo '</pre>';
-	#exit;
 	
         return $ret_arr;
     }

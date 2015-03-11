@@ -1,12 +1,10 @@
-ImperiumGPX
-Based on GamePanelX-V3 - Created by Ryan Gehrig
+==============
+GamePanelX-V3
+
+Created by Ryan Gehrig
 
 =============
 
-ImperiumGPX is a fork from GamePanelX with customizations made for Imperium Games, and fixes merged from the community.
-Every pull request here, should be also pull requested in the original GamePanelX project.
-
-==============
 GamePanelX is a Free and Open Source Game Control Panel.
 
 
