@@ -15,6 +15,3 @@ Documentation: http://gamepanelx.com/wikiv3/index.php?title=Main_Page
 Forums: http://forums.gamepanelx.com/
 
 Latest Downloads: http://gamepanelx.com/downloads/
-
-Imperium Games: http://www.imperiumgames.com.ar/
-
