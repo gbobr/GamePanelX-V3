@@ -262,7 +262,7 @@ function server_confirm_del_startup(startID,serverID)
 */
 
 // Restart a gameserver
-function server_restart(srvID)
+function server_restart(srvID,noinfo)
 {
     if(srvID == "")
     {
@@ -282,7 +282,7 @@ function server_restart(srvID)
             else infobox('f','Failed: '+html);
             
             // Refresh status
-            setTimeout("server_tab_info("+srvID+")",3000);
+            if(!noinfo) setTimeout("server_tab_info("+srvID+")",3000);
         },
         error:function(a,b,c){
             infobox('f','Error: '+b+', '+c);

@@ -22,6 +22,7 @@ require('checkallowed.php'); // Check logged-in
     <td width="260"><b><?php echo $lang['desc']; ?></b></td>
     <td width="150"><b><?php echo $lang['status']; ?></b></td>
     <td width="80"><b><?php echo $lang['manage']; ?></b></td>
+    <td width="80"><b><?php echo $lang['restart']; ?></b></td>
   </tr>
   
   <?php
@@ -111,7 +112,7 @@ require('checkallowed.php'); // Check logged-in
           $srv_status = '<font color="orange">'.$lang['unknown'].'</font>';
       }
       
-      echo '<tr id="srv_' . $srv_id . '" style="cursor:pointer;" onClick="javascript:server_tab_info(' . $srv_id . ');">
+      echo '<tr id="srv_' . $srv_id . '" style="cursor:pointer;">
               <td><img src="../images/gameicons/small/' . $srv_def_intname . '.png" width="20" height="20" border="0" /></td>
               <td>' . $srv_def_name . '</td>
               <td>' . $srv_username . '</td>
@@ -125,7 +126,8 @@ require('checkallowed.php'); // Check logged-in
               #else echo '&nbsp;';
               
               echo '</td>
-              <td class="links">'.$lang['manage'].'</td>
+              <td onClick="javascript:server_tab_info(' . $srv_id . ');" class="links">'.$lang['manage'].'</td>
+	      <td class="restart"><a onClick="javascript:server_restart('.$srv_id.',true)">Restart</a></td>
             </tr>';
   
       $count_json++;
