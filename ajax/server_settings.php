@@ -46,6 +46,11 @@ if(isset($_SESSION['gpx_admin']))
 ?>
 
 <tr>
+  <td><b><?php echo $lang['reinstall']; ?>:</b></td>
+  <td><span class="links" onClick="javascript:confirm_server_reinstall(<?php echo $url_id; ?>);"><?php echo $lang['reinstall']; ?></span></td>
+</tr>
+
+<tr>
   <td colspan="2">&nbsp;</td>
 </tr>
 

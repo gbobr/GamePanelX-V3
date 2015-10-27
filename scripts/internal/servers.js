@@ -561,6 +561,52 @@ function server_delete(srvID)
     });
 }
 
+// Confirm reinstalling a server
+function confirm_server_reinstall(srvID)
+{
+    if(srvID == "")
+    {
+        alert("No server ID given!");
+        return false;
+    }
+
+    var answer = confirm("Are you sure?\n\nDelete this server and ALL its files permanently?");
+
+    if(answer) server_reinstall(srvID);
+    else return false;
+}
+
+// Reinstall server
+function server_reinstall(srvID)
+{
+    if(srvID == "")
+    {
+        alert("No server ID given!");
+        return false;
+    }
+
+    $.ajax({
+        url: ajaxURL,
+        data: 'a=server_actions&do=reinstall&id='+srvID,
+        success:function(html){
+            if(html == 'success')
+            {
+                infobox('s','');
+                setTimeout("mainpage('servers','')",1000);
+            }
+            else
+            {
+                infobox('f','Error: '+html);
+            }
+
+
+        },
+        error:function(a,b,c){
+            infobox('f','Error: '+b+', '+c);
+        }
+    });
+}
+
 
 
 

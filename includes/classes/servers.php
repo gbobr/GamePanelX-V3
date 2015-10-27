@@ -577,6 +577,48 @@ class Servers
         
     }
 
+    // Reinstall a gameserver
+    public function reinstall($srvid)
+    {
+        if(empty($srvid)) return 'No server ID given';
+
+        // Get network info to SSH in
+        $srv_info = $this->getinfo($srvid);
+
+        $srv_username   = $srv_info[0]['username'];
+        $srv_ip         = $srv_info[0]['ip'];
+        $srv_port       = $srv_info[0]['port'];
+        $srv_netid      = $srv_info[0]['netid'];
+        $srv_parentid   = $srv_info[0]['parentid'];
+
+        $result_tpl  = @mysql_query("SELECT id FROM templates WHERE cfgid = (select defid from servers where id=$srvid) AND status = 'complete' AND is_default = '1' ORDER BY id LIMIT 1") or die('Failed to get the default template');
+        $row_tpl     = mysql_fetch_row($result_tpl);
+        $this_tplid  = $row_tpl[0];
+
+        // Run reinstall on server-side
+        $ssh_cmd  = "ReinstallServer -u $srv_username -i $srv_ip -p $srv_port -x $this_tplid";
+
+        require('network.php');
+        $Network  = new Network;
+        $net_info = $Network->netinfo($srv_netid);
+
+        $ssh_response = $Network->runcmd($srv_netid,$net_info,$ssh_cmd,true,$srvid);
+
+        // Delete from db
+
+        // If actually deleted files...
+        if($ssh_response == 'success')
+        {
+            return 'success';
+        }
+        else
+        {
+            // Can't delete the files.  Delete the server, but warn that files weren't deleted, otherwise we're stuck.
+            return 'Error reinstalling server: '.$ssh_response;
+        }
+
+    }
+
     // Soft-delete a server (just db delete)    
     public function delete_soft($srvid) {
 	if(empty($srvid)) return 'No server ID given';

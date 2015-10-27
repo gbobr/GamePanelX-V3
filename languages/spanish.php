@@ -76,6 +76,7 @@ $lang['login']              = 'Conectar';
 $lang['logout']             = 'Desconectar';
 $lang['logged_out']         = 'Desconectado con éxito';
 $lang['install']            = 'Instalar';
+$lang['reinstall']          = 'Reinstalar';
 $lang['installing']         = 'Instalando';
 $lang['not_installed']      = 'No Instalado';
 

@@ -319,7 +319,11 @@ elseif($url_do == 'delete')
     echo $Servers->delete($url_id);
 }
 
-
+// Reinstall Server
+elseif($url_do == 'reinstall')
+{
+    echo $Servers->reinstall($url_id);
+}
 
 
 // Create Server - get port for server
